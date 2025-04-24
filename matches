@@ -1,0 +1,7 @@
+Field | Matches Sample? | Logic Alignment
+git_qty | ✅ Yes | First month gets full sum of valid GITs, then subsequent months get 1st, 2nd, 3rd... FKIMG
+next_git_wh_qty | ✅ Yes | Computed as difference between current and next month's git_qty
+next_git_wh_date | ✅ Yes | Picked from first con_date that is less than each delivery date
+blg_warehouse_stock | ✅ Yes | Running stock subtracts delivery_qty, adds next_git_wh_qty
+Grouping by Month | ✅ Yes | Data is grouped using .dt.to_period('M') and handled month-wise
+Color-coded batches | ✅ Yes | Yellow, green, and pink indicate correctly grouped monthly GIT allocations
