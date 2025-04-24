@@ -48,40 +48,21 @@ Edit
 ├── utils.py                        # Helper functions
 ├── README.md                       # You are here 🚀
 ⚙️ Usage
-Ensure Django project is set up and database is migrated.
 
-Place script inside your app (e.g., logistics/).
 
-Call the function inside a Django command or scheduled task:
-
-python
-Copy
-Edit
-from logistics.compute_blg_stock_final import compute_blg_stock_final
 
 compute_blg_stock_final()
 Optional: Export the results as a DataFrame:
 
-python
-Copy
-Edit
+
 df = compute_blg_stock_final()
 df.to_excel("stock_report.xlsx", index=False)
-✅ Sample Output
 
-delivery_date	delivery_qty	blg_warehouse_stock	git_qty	next_git_wh_qty	next_git_wh_date
-2025-04-15	120	23040.00	5184.00	2880.00	2025-05-14
-2025-05-16	1152	23004.00	2304.00	576.00	2025-06-04
-2025-06-13	48	19428.00	1728.00	0.00	NaT
 🧪 Testing
 Run your script inside Django shell:
 
 bash
-Copy
-Edit
-python manage.py shell
->>> from logistics.compute_blg_stock_final import compute_blg_stock_final
->>> compute_blg_stock_final()
+
 💡 Future Improvements
 Add unit tests for monthly allocation logic
 
@@ -90,6 +71,6 @@ Integrate with Celery for scheduled execution
 Build frontend dashboard using React or Streamlit
 
 🧑‍💻 Author
-[Your Name Here]
-Logistics Automation Engineer • Django Dev
-📫 [YourEmail@example.com]
+s.Devi
+Junior Programmer |  Automation Engineer • Django Dev
+📫 [mailid]
