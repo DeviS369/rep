@@ -1,0 +1,95 @@
+
+🚛 BMW BLG Stock Computation System
+This project is a Django-based backend script designed to compute warehouse stock levels for BMW's BLG logistics using delivery data and pullout (GIT) information. It calculates live stock availability, assigns goods-in-transit across monthly delivery windows, and performs bulk updates to the database for warehouse management purposes.
+
+📦 Features
+📅 Monthly grouping of delivery data
+
+🔁 GIT (Goods-in-Transit) logic applied across months
+
+✅ Accurate stock tracking via blg_warehouse_stock and warehouse_stock
+
+🧠 Intelligent GIT allocation: git_qty, next_git_qty, next_git_wh_date
+
+⚡ Bulk update with transaction.atomic() for efficiency
+
+🛠 Fully integrated with Django ORM
+
+🧮 Business Logic Summary
+Clean Data: Filters out invalid delivery and pullout entries.
+
+Group by Article: Data is grouped by buyer_article_no.
+
+Delivery Processing: For each group:
+
+Deducts delivery_qty from blg_warehouse_stock
+
+Applies GIT (FKIMG) by month: first month gets all, subsequent months get 1-by-1.
+
+GIT Difference: Computes next_git_qty as the delta between current and next month GITs.
+
+Date Matching: Aligns next_git_wh_date from con_date values.
+
+Database Update: Updates stock fields in the supplyon_bmw and fetches from bmw_warehouse.
+
+🏗 Models Involved
+supplyon_bmw: Stores delivery and stock calculation fields
+
+bmw_warehouse: Used to fetch latest available warehouse stock
+
+Pullout Data: Dynamic data fetched via call_data()
+
+📁 File Structure
+bash
+Copy
+Edit
+├── compute_blg_stock_final.py      # Main computation script
+├── models.py                       # Django model definitions
+├── utils.py                        # Helper functions
+├── README.md                       # You are here 🚀
+⚙️ Usage
+Ensure Django project is set up and database is migrated.
+
+Place script inside your app (e.g., logistics/).
+
+Call the function inside a Django command or scheduled task:
+
+python
+Copy
+Edit
+from logistics.compute_blg_stock_final import compute_blg_stock_final
+
+compute_blg_stock_final()
+Optional: Export the results as a DataFrame:
+
+python
+Copy
+Edit
+df = compute_blg_stock_final()
+df.to_excel("stock_report.xlsx", index=False)
+✅ Sample Output
+
+delivery_date	delivery_qty	blg_warehouse_stock	git_qty	next_git_wh_qty	next_git_wh_date
+2025-04-15	120	23040.00	5184.00	2880.00	2025-05-14
+2025-05-16	1152	23004.00	2304.00	576.00	2025-06-04
+2025-06-13	48	19428.00	1728.00	0.00	NaT
+🧪 Testing
+Run your script inside Django shell:
+
+bash
+Copy
+Edit
+python manage.py shell
+>>> from logistics.compute_blg_stock_final import compute_blg_stock_final
+>>> compute_blg_stock_final()
+💡 Future Improvements
+Add unit tests for monthly allocation logic
+
+Integrate with Celery for scheduled execution
+
+Build frontend dashboard using React or Streamlit
+
+🧑‍💻 Author
+[Your Name Here]
+Logistics Automation Engineer • Django Dev
+📫 [YourEmail@example.com]
