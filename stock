@@ -1,0 +1,62 @@
+def stock():
+    data = {"IT_PULLOUT": []}
+    supplyon, _ = call_data(supplyon_bmw, data)
+    def safe_number(val, dtype=float):
+        num = pd.to_numeric(val, errors='coerce')
+        return dtype(num) if pd.notna(num) else dtype(0)
+    update_records = []
+    today_date = datetime.today().date()
+    supplyon = supplyon.sort_values(['buyer_article_no', 'delivery_date'])
+    for index, row in supplyon.iterrows():
+        delivery_date = pd.to_datetime(row['delivery_date'], errors='coerce').date()
+        if delivery_date >= today_date:
+            continue
+        try:
+            article_no = row['buyer_article_no']
+            warehouse_stock = safe_number(row.get('warehouse_stock'), int)
+            blg_warehouse_stock = safe_number(row.get('blg_warehouse_stock'), int)
+            despatch_qty = safe_number(row.get('delivery_quantity'), float)
+            git_qty = safe_number(row.get('git_qty'), int)
+            safety_stock_alm = warehouse_stock - blg_warehouse_stock
+            short_fall_dem_qty = despatch_qty - blg_warehouse_stock
+            tot_demand_qty_raise = safety_stock_alm + short_fall_dem_qty
+            creation_date = pd.to_datetime(row['creation_date'], errors='coerce')
+            if pd.notna(creation_date):
+                del_date_days = (datetime.now() - creation_date).days
+                demand_dt_prod = (datetime.now() - timedelta(days=100)).date()
+                dem_sea = (datetime.now() - timedelta(days=70)).date()
+                dem_air = (datetime.now() - timedelta(days=25)).date()
+            else:
+                demand_dt_prod = dem_sea = dem_air = None
+
+            if blg_warehouse_stock != 0:
+                mat_pos = 'Sufficient stock available in warehouse against call off'
+            elif git_qty != 0:
+                mat_pos = 'Alert on GIT material - Not reported on time against call-off'
+            else:
+                mat_pos = 'Stock not available - Plan for dispatch'
+
+            record = supplyon_bmw.objects.get(pk=row["id"])
+
+            # Assign fields with safety check for negatives
+            record.mat_pos = mat_pos
+            record.demand_dt_prod = demand_dt_prod
+            record.dem_sea = dem_sea
+            record.dem_air = dem_air
+            record.tot_demand_qty_raise = tot_demand_qty_raise if tot_demand_qty_raise >= 0 else None
+            record.safety_stock_alarm = safety_stock_alm if safety_stock_alm >= 0 else None
+            record.short_fall_demand_qty = short_fall_dem_qty if short_fall_dem_qty >= 0 else None
+            update_records.append(record)
+        except Exception as e:
+            print(f"Error processing row {row.get('id', 'unknown')}: {e}")
+    if update_records:
+        supplyon_bmw.objects.bulk_update(update_records, [
+            "mat_pos",
+            "demand_dt_prod",
+            "dem_sea",
+            "dem_air",
+            "tot_demand_qty_raise",
+            "safety_stock_alarm",
+            "short_fall_demand_qty"
+        ])
+stock()
