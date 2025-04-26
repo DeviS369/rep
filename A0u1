@@ -1,0 +1,118 @@
+import pandas as pd
+from datetime import datetime
+from django.db import transaction
+import logging
+
+logger = logging.getLogger(__name__)
+
+def compute_blg_stock_final():
+    today = pd.to_datetime(datetime.today().date())
+    data = {"IT_PULLOUT": []}
+    supplyon, pullout = call_data(supplyon_bmw, data)
+
+    # Step 1: Preprocess data
+    supplyon['delivery_date'] = pd.to_datetime(
+        supplyon['delivery_date'].replace('Backorder', pd.NaT), errors='coerce')
+    supplyon = supplyon.dropna(subset=['delivery_date'])
+    supplyon['delivery_quantity'] = pd.to_numeric(supplyon['delivery_quantity'], errors='coerce').fillna(0)
+
+    pullout['con_date'] = pd.to_datetime(pullout['con_date'], errors='coerce')
+    pullout['FKIMG'] = pd.to_numeric(pullout['FKIMG'], errors='coerce').fillna(0)
+
+    pullout.loc[
+        (pullout['con_date'].notna()) & (pullout['con_date'] < today) & (pullout['RECEP_FLG'] != 'X'),
+        'RECEP_FLG'
+    ] = 'X'
+
+    # Step 2: Prepare BLG stock dataframe
+    blg_df = pullout[pullout['RECEP_FLG'] == 'X'].groupby('buyer_article_no', as_index=False)['FKIMG'].sum()
+    blg_df = blg_df.rename(columns={'FKIMG': 'total_blg'})
+
+    # Step 3: Calculate GIT batches (future pullouts)
+    future_pullouts = pullout[(pullout['RECEP_FLG'] != 'X') & (pullout['con_date'] > today)].sort_values('con_date')
+    fkimg_batches = future_pullouts['FKIMG'].tolist()
+    con_dates = future_pullouts['con_date'].tolist()
+
+    git_qty_map = {}
+    next_git_qty_map = {}
+    con_date_map = {}
+
+    for i in range(len(fkimg_batches)):
+        month = pd.Period(con_dates[i], freq='M') if i < len(con_dates) else None
+        git_qty_map[month] = sum(fkimg_batches[i:])
+        if i + 1 < len(fkimg_batches):
+            next_git_qty_map[month] = git_qty_map[month] - fkimg_batches[i + 1]
+            con_date_map[month] = con_dates[i + 1]
+        else:
+            next_git_qty_map[month] = fkimg_batches[i]
+            con_date_map[month] = pd.NaT
+
+    logger.debug(f"Git Quantity Map: {git_qty_map}")
+    logger.debug(f"Next Git Quantity Map: {next_git_qty_map}")
+    logger.debug(f"Con Date Map: {con_date_map}")
+
+    # Step 4: Apply Updates
+    update_records = []
+    result_rows = []
+
+    for article, group in supplyon.groupby('buyer_article_no'):
+        group = group.sort_values('delivery_date')
+        stock = blg_df.loc[blg_df['buyer_article_no'] == article, 'total_blg']
+        stock_val = stock.iloc[0] if not stock.empty else 0
+
+        first_of_months = {}
+        for idx, row in group.iterrows():
+            delivery_date = row['delivery_date']
+            if delivery_date <= today:
+                continue
+
+            month = pd.Period(delivery_date, freq='M')
+
+            # Assign stock_val only to first delivery_date of month
+            if month not in first_of_months:
+                supplyon.at[idx, 'blg_warehouse_stock'] = stock_val
+                first_of_months[month] = True
+            else:
+                supplyon.at[idx, 'blg_warehouse_stock'] = 0
+
+            git_qty = git_qty_map.get(month, 0)
+            next_git_qty = next_git_qty_map.get(month, 0)
+            con_date = con_date_map.get(month, pd.NaT)
+
+            supplyon.at[idx, 'git_qty'] = git_qty
+            supplyon.at[idx, 'next_git_wh_qty'] = next_git_qty
+            supplyon.at[idx, 'next_git_wh_date'] = con_date
+
+            # Update database object
+            rec = supplyon_bmw.objects.get(pk=row['id'])
+            rec.blg_warehouse_stock = supplyon.at[idx, 'blg_warehouse_stock']
+            rec.git_qty = git_qty
+            rec.next_git_wh_qty = next_git_qty
+            rec.next_git_wh_date = con_date
+
+            latest = bmw_warehouse.objects.filter(buyer_article_no=article).order_by('-entry_date').first()
+            rec.warehouse_stock = latest.warehouse_qty if latest else 0
+
+            update_records.append(rec)
+
+            result_rows.append({
+                'id': row['id'],
+                'buyer_article_no': article,
+                'delivery_date': delivery_date,
+                'delivery_qty': row['delivery_quantity'],
+                'git_qty': git_qty,
+                'next_git_qty': next_git_qty,
+                'blg_warehouse_stock': supplyon.at[idx, 'blg_warehouse_stock'],
+                'warehouse_stock': rec.warehouse_stock,
+            })
+
+    # Step 5: Bulk update in DB
+    if update_records:
+        with transaction.atomic():
+            supplyon_bmw.objects.bulk_update(
+                update_records,
+                ["blg_warehouse_stock", "git_qty", "next_git_wh_qty", "next_git_wh_date", "warehouse_stock"]
+            )
+        logger.info(f"✅ Successfully updated {len(update_records)} records.")
+
+    return pd.DataFrame(result_rows)
